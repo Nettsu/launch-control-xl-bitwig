@@ -12,8 +12,8 @@ Novation Launch Control XL Bitwig Script
     + yellow means it is queued for stop
     + no colour means all clips are stopped
 - Press the button to stop clips on the corresponding track.
-- The UP and DOWN buttons control tempo.
-- The LEFT and RIGHT buttons control the crossfader.
-- The SOLO, MUTE and ARM buttons change the function of the second row of buttons.
+- The UP and DOWN side buttons control tempo.
+- The LEFT and RIGHT side buttons control the crossfader.
+- The SOLO, MUTE and ARM side buttons change the function of the second row of buttons.
 
 The script needs the Launch Control XL to be in 'User 1' mode.
