@@ -127,11 +127,8 @@ function updatePad(pad)
 {
     if (pad < 8)
     {
-        if (buttonMode == ButtonMode.STOP)
-        {
-            var state = playbackStates[pad];
-            sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], PlaybackStateColour[state]);
-        }
+        var state = playbackStates[pad];
+        sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], PlaybackStateColour[state]);
     }
     else
     {
@@ -340,7 +337,7 @@ function onMidi(status, data1, data2)
         var channelIdx = KnobMap[data1] % 8;
         var send = 0;
 
-        sendBanks[i].getItemAt(send).set(data2, 128);
+        sendBanks[channelIdx].getItemAt(send).set(data2, 128);
     }
     // Faders
     else if (status == UserPageCCs.Page1 && FaderMap[data1] >= 0 && FaderMap[data1] < 8)
