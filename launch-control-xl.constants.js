@@ -56,10 +56,17 @@ var SoloColour =
     Colour.YELLOW_FULL
 ];
 
+var ArrowButtonColour =
+[
+	Colour.OFF,
+    Colour.RED_LOW,
+    Colour.RED_FULL
+];
+
 var SideButtonColour =
 [
     Colour.OFF,
-    Colour.YELLOW_FULL
+    Colour.AMBER_FULL
 ];
 
 var ArrowButton =

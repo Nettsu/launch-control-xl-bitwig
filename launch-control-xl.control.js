@@ -65,6 +65,7 @@ var childTrackCount         = [];
 var childDeviceCursors      = [];
 var childControlPageCursors = [];
 var sendBanks               = [];
+var currentTime;
 
 function init()
 {
@@ -77,6 +78,12 @@ function init()
     transport.getCrossfade().addValueObserver(crossfadeObserver);
 
     var slotBanks = [];
+
+    transport.getPosition().addTimeObserver(":", 2, 1, 1, 0  , function(value)
+	{
+		currentTime = value;
+		updateOnBeat();
+	});
 
     for (var i = 0; i < NUM_TRACKS; i++)
     {
@@ -109,6 +116,20 @@ function init()
     }
     
     updatePads();
+}
+
+function updateOnBeat()
+{
+    if (parseInt(currentTime.split(":")[2]) <= 2)
+    {
+        sendMidi(UserPageCCs.Page1, ArrowButton.UP, ArrowButtonColour[2]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.DOWN, ArrowButtonColour[2]);
+    }
+    else
+    {
+        sendMidi(UserPageCCs.Page1, ArrowButton.UP, ArrowButtonColour[0]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.DOWN, ArrowButtonColour[0]);
+    }
 }
 
 function updatePads()
@@ -201,18 +222,18 @@ var crossfadeObserver = function(value)
 {
     if (value == 0)
     {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, SideButtonColour[1]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, SideButtonColour[0]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[2]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[0]);
     }
     else if (value == 1)
     {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, SideButtonColour[0]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, SideButtonColour[1]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[0]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[2]);
     }
     else
     {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, SideButtonColour[1]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, SideButtonColour[1]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[1]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[1]);
     }
 }
 
@@ -345,10 +366,16 @@ function onMidi(status, data1, data2)
         var channelIdx = FaderMap[data1];
         
         // to map the faders to 0db maximum, set the max value in the XL Editor to 102
-        trackBank.getChannel(channelIdx).getVolume().set(data2, 128);
-        for (var i = 0; i < childTrackCount[channelIdx]; i++)
-        {       
-            childTracks[channelIdx].getChannel(i).getVolume().set(data2, 128);
+        if (childTrackCount[channelIdx] == 0)
+        {
+            trackBank.getChannel(channelIdx).getVolume().set(data2, 128);
+        }
+        else
+        {
+            for (var i = 0; i < childTrackCount[channelIdx]; i++)
+            {       
+                childTracks[channelIdx].getChannel(i).getVolume().set(data2, 128);
+            }
         }
     }
 }
