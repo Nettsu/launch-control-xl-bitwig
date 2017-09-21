@@ -9,6 +9,7 @@ host.defineSysexIdentityReply('F0 7E 00 06 02 00 20 29 61 00 00 00 00 00 03 06 F
 load("launch-control-xl.constants.js");
 
 var buttonMode = ButtonMode.SOLO;
+var knobMode = KnobMode.PERFORM;
 
 var playbackStates =
 [
@@ -22,41 +23,12 @@ var playbackStates =
     PlaybackState.STOPPED
 ];
 
-var muteStates =
-[
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false
-];
-
-var soloStates =
-[
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false
-];
-
-var recordStates =
-[
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false
-];
+var muteStates      = [false, false, false, false, false, false, false, false];
+var soloStates      = [false, false, false, false, false, false, false, false];
+var recordStates    = [false, false, false, false, false, false, false, false];
+var stoppedStates   = [false, false, false, false, false, false, false, false];
+var queuedStates    = [false, false, false, false, false, false, false, false];
+var meterValues     = [0,0,0,0,0,0,0,0];
 
 var deviceCursors           = [];
 var controlPageCursors      = [];
@@ -66,6 +38,150 @@ var childDeviceCursors      = [];
 var childControlPageCursors = [];
 var sendBanks               = [];
 var currentTime;
+
+function toHex(d)
+{
+    return  ("0"+(Number(Math.round(d)).toString(16))).slice(-2).toUpperCase()
+}
+
+// OBSERVER FUNCTIONS //
+
+var childrenCountObserver = function(channel)
+{
+    var ch = channel;
+    return function (count)
+    {
+        if (count > MAX_CHILD_TRACKS)
+        {
+            count = MAX_CHILD_TRACKS;
+        }
+        childTrackCount[ch] = count;
+    }
+};
+
+var playbackObserver = function(channel)
+{
+    var ch = channel;
+    return function (slot, state, queued)
+    {
+        //println(ch + " " + slot + " " + state + " " + queued);
+        if (state == 0 && !queued)
+        {
+            playbackStates[ch] = PlaybackState.STOPPED;
+        }
+        else if (state == 0 && queued)
+        {
+            playbackStates[ch] = PlaybackState.STOPDUE;
+        }
+        else if (state == 1 && queued)
+        {
+            playbackStates[ch] = PlaybackState.QUEUED;
+        }
+        else if (state == 1 && !queued)
+        {
+            playbackStates[ch] = PlaybackState.PLAYING;
+        }
+
+        updatePad(ch);
+    }
+};
+
+var stoppedObserver = function(channel)
+{
+    var ch = channel;
+    return function (stopped)
+    {
+        stoppedStates[ch] = stopped;
+        if (stopped)
+        {
+            playbackStates[ch] = PlaybackState.STOPPED;
+        }
+        else
+        {
+            playbackStates[ch] = PlaybackState.PLAYING;
+        }
+        updatePad(ch);
+    }
+};
+
+var queuedForStopObserver = function(channel)
+{
+    var ch = channel;
+    return function (queued)
+    {
+        queuedStates[ch] = queued;
+        if (queued)
+        {
+            playbackStates[ch] = PlaybackState.STOPDUE;
+            updatePad(ch);
+        }
+    }
+};
+
+var meterObserver = function(channel)
+{
+    var ch = channel;
+    return function (meter)
+    {
+        if (Math.abs(meterValues[ch] - meter) >= 13)
+        {
+            meterValues[ch] = meter;
+            //println(ch + " " + meter);
+            updateMeter(ch);
+        }
+    }
+};
+
+var muteObserver = function(channel)
+{
+    var ch = channel;
+    return function (mute)
+    {
+        muteStates[ch] = mute;
+        updatePad(ch+8);
+    }
+};
+
+var crossfadeObserver = function(value)
+{
+    if (value == 0)
+    {
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[2]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[0]);
+    }
+    else if (value == 1)
+    {
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[0]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[2]);
+    }
+    else
+    {
+        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[1]);
+        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[1]);
+    }
+}
+
+var soloObserver = function(channel)
+{
+    var ch = channel;
+    return function (solo)
+    {
+        soloStates[ch] = solo;
+        updatePad(ch+8);
+    }
+};
+
+var recordObserver = function(channel)
+{
+    var ch = channel;
+    return function (record)
+    {
+        recordStates[ch] = record;
+        updatePad(ch+8);
+    }
+};
+
+// INIT FUNCTION //
 
 function init()
 {
@@ -81,8 +197,11 @@ function init()
 
     transport.getPosition().addTimeObserver(":", 2, 1, 1, 0  , function(value)
 	{
-		currentTime = value;
-		updateOnBeat();
+        if (value != currentTime)
+        {
+            currentTime = value;
+            updateOnBeat();
+        }
 	});
 
     for (var i = 0; i < NUM_TRACKS; i++)
@@ -107,16 +226,25 @@ function init()
 
         slotBanks[i] = trackBank.getChannel(i).getClipLauncherSlots();
         slotBanks[i].addPlaybackStateObserver(playbackObserver(i));
+        
+        //trackBank.getTrack(i).isQueuedForStop().addValueObserver(queuedForStopObserver(i));
+        //trackBank.getTrack(i).isStopped().addValueObserver(stoppedObserver(i));
+        
+        //trackBank.getChannel(i).addVuMeterObserver(100, -1, true, meterObserver(i));
 
         trackBank.getChannel(i).getMute().addValueObserver(muteObserver(i));
         trackBank.getChannel(i).getSolo().addValueObserver(soloObserver(i));
         trackBank.getChannel(i).getArm().addValueObserver(recordObserver(i));
         
         sendBanks[i] = trackBank.getChannel(i).sendBank();
+        
+        //updateMeter(i);
     }
     
     updatePads();
 }
+
+// UPDATE LEDS //
 
 function updateOnBeat()
 {
@@ -168,94 +296,24 @@ function updatePad(pad)
     }
 }
 
-var childrenCountObserver = function(channel)
+function updateMeter(channel)
 {
-    var ch = channel;
-    return function (count)
-        {
-            if (count > MAX_CHILD_TRACKS)
-            {
-                count = MAX_CHILD_TRACKS;
-            }
-            childTrackCount[ch] = count;
-        }
-};
-
-var playbackObserver = function(channel)
-{
-    var ch = channel;
-    return function (slot, state, queued)
-        {
-            //println(ch + " " + slot + " " + state + " " + queued);
-            if (state == 0 && !queued)
-            {
-                playbackStates[ch] = PlaybackState.STOPPED;
-            }
-            else if (state == 0 && queued)
-            {
-                playbackStates[ch] = PlaybackState.STOPDUE;
-            }
-            else if (state == 1 && queued)
-            {
-                playbackStates[ch] = PlaybackState.QUEUED;
-            }
-            else if (state == 1 && !queued)
-            {
-                playbackStates[ch] = PlaybackState.PLAYING;
-            }
-
-            updatePad(ch);
-        }
-};
-
-var muteObserver = function(channel)
-{
-    var ch = channel;
-    return function (mute)
-        {
-            muteStates[ch] = mute;
-            updatePad(ch+8);
-        }
-};
-
-var crossfadeObserver = function(value)
-{
-    if (value == 0)
+    var divider = 100 / meterColours.length;
+    var meterValue = Math.floor(meterValues[channel]/divider);
+    if (meterValue >= meterColours.length)
     {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[2]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[0]);
+        meterValue = meterColours.length - 1;
     }
-    else if (value == 1)
-    {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[0]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[2]);
-    }
-    else
-    {
-        sendMidi(UserPageCCs.Page1, ArrowButton.LEFT, ArrowButtonColour[1]);
-        sendMidi(UserPageCCs.Page1, ArrowButton.RIGHT, ArrowButtonColour[1]);
-    }
+    var ledColour1 = toHex(meterColours[meterValue][0]);
+    var ledColour2 = toHex(meterColours[meterValue][1]);
+    var ledColour3 = toHex(meterColours[meterValue][2]);
+    
+    var sysexString = SYSEX_HEADER + "00 " + sysexKnobs[channel] + ledColour1 + sysexKnobs[channel+8] + ledColour2 + sysexKnobs[channel+16] + ledColour3 + " F7";
+    //var sysexString = SYSEX_HEADER + "00 " + sysexKnobs[channel] + ledColour1 + " F7";
+    sendSysex(sysexString);
 }
 
-var soloObserver = function(channel)
-{
-    var ch = channel;
-    return function (solo)
-        {
-            soloStates[ch] = solo;
-            updatePad(ch+8);
-        }
-};
-
-var recordObserver = function(channel)
-{
-    var ch = channel;
-    return function (record)
-        {
-            recordStates[ch] = record;
-            updatePad(ch+8);
-        }
-};
+// PROCESS MIDI //
 
 function processSideButtons(status, data1, data2)
 {

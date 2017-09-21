@@ -1,10 +1,9 @@
-var LOWEST_CC = 21;
-var HIGHEST_CC = 48;
-
 var NUM_TRACKS = 8;
 var NUM_SENDS = 3;
 var NUM_SCENES = 64;
 var MAX_CHILD_TRACKS = 5;
+
+var SYSEX_HEADER = "F0 00 20 29 02 11 78 ";
 
 var Colour = // Novation are from the UK
 {
@@ -93,12 +92,50 @@ var ButtonMode =
     RECORD:3
 };
 
+var KnobMode =
+{
+	PERFORM:0,
+	MIX:1
+};
+
 var KnobMap = 
 {
     '13':0,  '14':1,  '15':2,  '16':3,  '17':4,  '18':5,  '19':6,  '20':7,
     '29':8,  '30':9,  '31':10, '32':11, '33':12, '34':13, '35':14, '36':15,
     '49':16, '50':17, '51':18, '52':19, '53':20, '54':21, '55':22, '56':23
 };
+
+var sysexKnobs =
+[
+	'00', '01', '02', '03', '04', '05', '06', '07',
+	'08', '09', '0A', '0B', '0C', '0D', '0E', '0F',
+	'10', '11', '12', '13', '14', '15', '16', '17'
+];
+
+var meterColours =
+[
+	[Colour.OFF, Colour.OFF, Colour.OFF],
+	[Colour.OFF, Colour.OFF, Colour.GREEN_LOW],
+	[Colour.OFF, Colour.OFF, Colour.GREEN_FULL],
+	[Colour.OFF, Colour.AMBER_LOW, Colour.GREEN_FULL],
+	//[Colour.OFF, Colour.YELLOW_FULL, Colour.GREEN_FULL],
+	[Colour.OFF, Colour.AMBER_FULL, Colour.GREEN_FULL],
+	//[Colour.AMBER_FULL, Colour.YELLOW_FULL, Colour.GREEN_FULL],
+	[Colour.RED_LOW, Colour.YELLOW_FULL, Colour.GREEN_FULL],
+	[Colour.RED_FULL, Colour.YELLOW_FULL, Colour.GREEN_FULL]
+];
+
+/*var meterColours =
+[
+	[Colour.OFF],
+	[Colour.GREEN_LOW],
+	[Colour.GREEN_FULL],
+	//[Colour.AMBER_LOW],
+	[Colour.YELLOW_FULL],
+	[Colour.AMBER_FULL],
+	[Colour.RED_LOW],
+	[Colour.RED_FULL]
+];*/
 
 var FaderMap = {'77':0, '78':1, '79':2, '80':3, '81':4, '82':5, '83':6, '84':7};
 
