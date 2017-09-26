@@ -7,28 +7,19 @@ host.defineSysexIdentityReply('F0 7E 00 06 02 00 20 29 61 00 00 00 00 00 03 06 F
 
 //Load LaunchControl constants containing the status for pages and other constant variables
 load("launch-control-xl.constants.js");
+load("launch-control-xl.utils.js");
 
 var buttonMode = ButtonMode.SOLO;
 var knobMode = KnobMode.PERFORM;
 
-var playbackStates =
-[
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED,
-    PlaybackState.STOPPED
-];
+var playbackStates = makeArray(NUM_TRACKS, PlaybackState.STOPPED);
+var playbackStatesClips = makeTable(NUM_TRACKS, NUM_SCENES, PlaybackState.STOPPED);
 
 var muteStates      = [false, false, false, false, false, false, false, false];
 var soloStates      = [false, false, false, false, false, false, false, false];
 var recordStates    = [false, false, false, false, false, false, false, false];
-var stoppedStates   = [false, false, false, false, false, false, false, false];
-var queuedStates    = [false, false, false, false, false, false, false, false];
-var meterValues     = [0,0,0,0,0,0,0,0];
+var stoppedStates   = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, true);
+var queuedStates    = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, false);
 
 var deviceCursors           = [];
 var controlPageCursors      = [];
@@ -38,11 +29,6 @@ var childDeviceCursors      = [];
 var childControlPageCursors = [];
 var sendBanks               = [];
 var currentTime;
-
-function toHex(d)
-{
-    return  ("0"+(Number(Math.round(d)).toString(16))).slice(-2).toUpperCase()
-}
 
 // OBSERVER FUNCTIONS //
 
@@ -67,67 +53,66 @@ var playbackObserver = function(channel)
         //println(ch + " " + slot + " " + state + " " + queued);
         if (state == 0 && !queued)
         {
-            playbackStates[ch] = PlaybackState.STOPPED;
+            playbackStatesClips[ch][slot] = PlaybackState.STOPPED;
         }
         else if (state == 0 && queued)
         {
-            playbackStates[ch] = PlaybackState.STOPDUE;
+            playbackStatesClips[ch][slot] = PlaybackState.STOPDUE;
         }
         else if (state == 1 && queued)
         {
-            playbackStates[ch] = PlaybackState.QUEUED;
+            playbackStatesClips[ch][slot] = PlaybackState.QUEUED;
         }
         else if (state == 1 && !queued)
         {
-            playbackStates[ch] = PlaybackState.PLAYING;
+            playbackStatesClips[ch][slot] = PlaybackState.PLAYING;
         }
-
+        
+        playbackStates[ch] = PlaybackState.STOPPED;
+        for (var i = 0; i < NUM_SCENES; i++)
+        {
+            if (playbackStatesClips[ch][i] > playbackStates[ch])
+            {
+                playbackStates[ch] = playbackStatesClips[ch][i];
+            }
+        }
+        
         updatePad(ch);
     }
 };
 
-var stoppedObserver = function(channel)
+var stoppedObserver = function(track, child)
 {
-    var ch = channel;
+    var t = track;
+    var ch = child;
     return function (stopped)
     {
-        stoppedStates[ch] = stopped;
-        if (stopped)
+        stoppedStates[t][ch] = stopped;
+        
+        playbackStates[t] = PlaybackState.STOPPED;
+        for (var i = 0; i < childTrackCount[t] + 1; i++)
         {
-            playbackStates[ch] = PlaybackState.STOPPED;
+            if (stoppedStates[t][i] == false)
+            {
+                playbackStates[t] = PlaybackState.PLAYING;
+            }
         }
-        else
-        {
-            playbackStates[ch] = PlaybackState.PLAYING;
-        }
-        updatePad(ch);
+        
+        updatePad(t);
     }
 };
 
-var queuedForStopObserver = function(channel)
+var queuedForStopObserver = function(track, child)
 {
-    var ch = channel;
+    var t = track;
+    var ch = child;
     return function (queued)
     {
-        queuedStates[ch] = queued;
+        queuedStates[t][ch] = queued;
         if (queued)
         {
-            playbackStates[ch] = PlaybackState.STOPDUE;
-            updatePad(ch);
-        }
-    }
-};
-
-var meterObserver = function(channel)
-{
-    var ch = channel;
-    return function (meter)
-    {
-        if (Math.abs(meterValues[ch] - meter) >= 13)
-        {
-            meterValues[ch] = meter;
-            //println(ch + " " + meter);
-            updateMeter(ch);
+            playbackStates[t] = PlaybackState.STOPDUE;
+            updatePad(t);
         }
     }
 };
@@ -211,7 +196,7 @@ function init()
         controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
 
         childTracks[i] = trackBank.getChannel(i).createTrackBank(MAX_CHILD_TRACKS, 0, 0, false);
-        childTracks[i].addChannelCountObserver(childrenCountObserver(i));
+        childTracks[i].channelCount().addValueObserver(childrenCountObserver(i));
 
         // create child track cursors for the track, one for each potential child
         var childDeviceCursorsArray = [];
@@ -221,24 +206,18 @@ function init()
             childDeviceCursorsArray[j] = childTracks[i].getChannel(j).createDeviceBank(1);
             childControlPageCursorsArray[j] = childDeviceCursorsArray[j].getDevice(0).createCursorRemoteControlsPage(3);
         }
+        
         childDeviceCursors[i] = childDeviceCursorsArray;
         childControlPageCursors[i] = childControlPageCursorsArray;
 
         slotBanks[i] = trackBank.getChannel(i).getClipLauncherSlots();
         slotBanks[i].addPlaybackStateObserver(playbackObserver(i));
-        
-        //trackBank.getTrack(i).isQueuedForStop().addValueObserver(queuedForStopObserver(i));
-        //trackBank.getTrack(i).isStopped().addValueObserver(stoppedObserver(i));
-        
-        //trackBank.getChannel(i).addVuMeterObserver(100, -1, true, meterObserver(i));
 
         trackBank.getChannel(i).getMute().addValueObserver(muteObserver(i));
         trackBank.getChannel(i).getSolo().addValueObserver(soloObserver(i));
         trackBank.getChannel(i).getArm().addValueObserver(recordObserver(i));
         
         sendBanks[i] = trackBank.getChannel(i).sendBank();
-        
-        //updateMeter(i);
     }
     
     updatePads();
@@ -294,23 +273,6 @@ function updatePad(pad)
             sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], RecordColour[recordStates[pad - 8] ? 1 : 0]);
         }
     }
-}
-
-function updateMeter(channel)
-{
-    var divider = 100 / meterColours.length;
-    var meterValue = Math.floor(meterValues[channel]/divider);
-    if (meterValue >= meterColours.length)
-    {
-        meterValue = meterColours.length - 1;
-    }
-    var ledColour1 = toHex(meterColours[meterValue][0]);
-    var ledColour2 = toHex(meterColours[meterValue][1]);
-    var ledColour3 = toHex(meterColours[meterValue][2]);
-    
-    var sysexString = SYSEX_HEADER + "00 " + sysexKnobs[channel] + ledColour1 + sysexKnobs[channel+8] + ledColour2 + sysexKnobs[channel+16] + ledColour3 + " F7";
-    //var sysexString = SYSEX_HEADER + "00 " + sysexKnobs[channel] + ledColour1 + " F7";
-    sendSysex(sysexString);
 }
 
 // PROCESS MIDI //

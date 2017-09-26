@@ -23,18 +23,18 @@ var Colour = // Novation are from the UK
 
 var PlaybackState =
 {
-    QUEUED:0,
-    STOPDUE:1,
-    STOPPED:2,
+    STOPPED:0,
+    QUEUED:1,
+    STOPDUE:2,
     PLAYING:3
 };
 
 var PlaybackStateColour =
 [
-    Colour.GREEN_FULL,
-    Colour.YELLOW_FULL,
-    Colour.OFF,
-    Colour.GREEN_LOW
+	Colour.OFF,
+	Colour.GREEN_FULL,
+	Colour.YELLOW_FULL,
+	Colour.GREEN_LOW
 ];
 
 var MuteColour =
