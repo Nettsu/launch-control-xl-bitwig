@@ -141,6 +141,19 @@ var sendObserver = function(channel, send)
     }
 };
 
+var macroObserver = function(channel, macro)
+{
+    var ch = channel;
+    return function (macro_amount)
+    {
+        if (send == DEVICE_MACRO)
+        {
+            deviceStates[ch] = macro_amount != 0;
+            updatePad(ch+8);
+        }
+    }
+};
+
 var crossfadeObserver = function(value)
 {
     if (value == 0)
@@ -208,6 +221,7 @@ function init()
         // create main device cursor for the track
         deviceCursors[i] = trackBank.getChannel(i).createDeviceBank(1);
         controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
+        controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
 
         childTracks[i] = trackBank.getChannel(i).createTrackBank(MAX_CHILD_TRACKS, 0, 0, false);
         childTracks[i].channelCount().addValueObserver(childrenCountObserver(i));
@@ -232,7 +246,10 @@ function init()
         trackBank.getChannel(i).getArm().addValueObserver(recordObserver(i));
         
         sendBanks[i] = trackBank.getChannel(i).sendBank();
-        sendBanks[i].getItemAt(DEVICE_SEND).addValueObserver(sendObserver(i, DEVICE_SEND));
+
+        //sendBanks[i].getItemAt(DEVICE_SEND).addValueObserver(sendObserver(i, DEVICE_SEND));
+        
+        controlPageCursors[i].getParameter(DEVICE_MACRO).addValueObserver(macroObserver(i, DEVICE_MACRO));
     }
     
     updatePads();
@@ -381,9 +398,11 @@ function onMidi(status, data1, data2)
             else if (buttonMode == ButtonMode.DEVICE && data2 == 127)
             {
                 if (deviceStates[ch] == true)
-                    sendBanks[ch].set(0, 127);
+                    //sendBanks[ch].set(0, 128);
+                    controlPageCursors[ch].getParameter(DEVICE_MACRO).set(0, 128);
                 else
-                    sendBanks[ch].set(127, 127);
+                    //sendBanks[ch].set(127, 128);
+                    controlPageCursors[ch].getParameter(DEVICE_MACRO).set(127, 128);
             }
         }
         updatePad(button);

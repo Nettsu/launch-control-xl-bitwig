@@ -4,6 +4,7 @@ var NUM_SCENES = 64;
 var MAX_CHILD_TRACKS = 5;
 
 var DEVICE_SEND = 1;
+var DEVICE_MACRO = 2;
 
 var SYSEX_HEADER = "F0 00 20 29 02 11 78 ";
 
