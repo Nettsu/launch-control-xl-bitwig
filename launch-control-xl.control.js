@@ -18,6 +18,7 @@ var playbackStatesClips = makeTable(NUM_TRACKS, NUM_SCENES, PlaybackState.STOPPE
 var muteStates      = [false, false, false, false, false, false, false, false];
 var soloStates      = [false, false, false, false, false, false, false, false];
 var recordStates    = [false, false, false, false, false, false, false, false];
+var deviceStates    = [false, false, false, false, false, false, false, false];
 var stoppedStates   = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, true);
 var queuedStates    = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, false);
 
@@ -127,6 +128,19 @@ var muteObserver = function(channel)
     }
 };
 
+var sendObserver = function(channel, send)
+{
+    var ch = channel;
+    return function (send_amount)
+    {
+        if (send == DEVICE_SEND)
+        {
+            deviceStates[ch] = send_amount != 0;
+            updatePad(ch+8);
+        }
+    }
+};
+
 var crossfadeObserver = function(value)
 {
     if (value == 0)
@@ -218,6 +232,7 @@ function init()
         trackBank.getChannel(i).getArm().addValueObserver(recordObserver(i));
         
         sendBanks[i] = trackBank.getChannel(i).sendBank();
+        sendBanks[i].getItemAt(DEVICE_SEND).addValueObserver(sendObserver(i, DEVICE_SEND));
     }
     
     updatePads();
@@ -249,6 +264,7 @@ function updatePads()
     sendMidi(UserPageNotes.Page1, SideButton.SOLO, SideButtonColour[buttonMode == ButtonMode.SOLO ? 1 : 0]);
     sendMidi(UserPageNotes.Page1, SideButton.MUTE, SideButtonColour[buttonMode == ButtonMode.MUTE ? 1 : 0]);
     sendMidi(UserPageNotes.Page1, SideButton.RECORD, SideButtonColour[buttonMode == ButtonMode.RECORD ? 1 : 0]);
+    sendMidi(UserPageNotes.Page1, SideButton.DEVICE, SideButtonColour[buttonMode == ButtonMode.DEVICE ? 1 : 0]);
 }
 
 function updatePad(pad)
@@ -272,6 +288,10 @@ function updatePad(pad)
         {
             sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], RecordColour[recordStates[pad - 8] ? 1 : 0]);
         }
+        else if (buttonMode == ButtonMode.DEVICE)
+        {
+            sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], DeviceColour[deviceStates[pad - 8] ? 1 : 0]);
+        }
     }
 }
 
@@ -294,6 +314,11 @@ function processSideButtons(status, data1, data2)
         else if (data1 == SideButton.RECORD && data2 == 127)
         {
             buttonMode = ButtonMode.RECORD;
+            updatePads();
+        }
+        else if (data1 == SideButton.DEVICE && data2 == 127)
+        {
+            buttonMode = ButtonMode.DEVICE;
             updatePads();
         }
     }
@@ -341,17 +366,24 @@ function onMidi(status, data1, data2)
         }
         else
         {
-            if (buttonMode == ButtonMode.MUTE)
+            if (buttonMode == ButtonMode.MUTE && data2 == 127)
             {
                 trackBank.getChannel(ch).getMute().toggle();
             }
-            else if (buttonMode == ButtonMode.SOLO)
+            else if (buttonMode == ButtonMode.SOLO && data2 == 127)
             {
                 trackBank.getChannel(ch).getSolo().toggle(false);
             }
-            else if (buttonMode == ButtonMode.RECORD)
+            else if (buttonMode == ButtonMode.RECORD && data2 == 127)
             {
                 trackBank.getChannel(ch).getArm().toggle();
+            }
+            else if (buttonMode == ButtonMode.DEVICE && data2 == 127)
+            {
+                if (deviceStates[ch] == true)
+                    sendBanks[ch].set(0, 127);
+                else
+                    sendBanks[ch].set(127, 127);
             }
         }
         updatePad(button);
