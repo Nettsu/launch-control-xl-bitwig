@@ -146,7 +146,7 @@ var macroObserver = function(channel, macro)
     var ch = channel;
     return function (macro_amount)
     {
-        if (send == DEVICE_MACRO)
+        if (macro == DEVICE_MACRO)
         {
             deviceStates[ch] = macro_amount != 0;
             updatePad(ch+8);
@@ -220,7 +220,6 @@ function init()
     {
         // create main device cursor for the track
         deviceCursors[i] = trackBank.getChannel(i).createDeviceBank(1);
-        controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
         controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
 
         childTracks[i] = trackBank.getChannel(i).createTrackBank(MAX_CHILD_TRACKS, 0, 0, false);
