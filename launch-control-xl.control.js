@@ -428,6 +428,9 @@ function onMidi(status, data1, data2)
         var channelIdx = KnobMap[data1] % 8;
         var send = 0;
 
+		// workaround for the send knob lagging when moving to/from -inf
+		if (data2 == 0) data2 = 1;
+
         sendBanks[channelIdx].getItemAt(send).set(data2, 128);
     }
     // Faders
