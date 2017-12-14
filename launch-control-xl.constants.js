@@ -1,10 +1,11 @@
 var NUM_TRACKS = 8;
 var NUM_SENDS = 3;
-var NUM_SCENES = 64;
+var NUM_SCENES = 1;
 var MAX_CHILD_TRACKS = 5;
 
 var DEVICE_SEND = 1;
-var DEVICE_MACRO = 2;
+var SELECT_MACRO = 2;
+var DEVICE_MACRO = 3;
 
 var SYSEX_HEADER = "F0 00 20 29 02 11 78 ";
 

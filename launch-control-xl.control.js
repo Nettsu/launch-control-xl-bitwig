@@ -18,7 +18,7 @@ var playbackStatesClips = makeTable(NUM_TRACKS, NUM_SCENES, PlaybackState.STOPPE
 var muteStates      = [false, false, false, false, false, false, false, false];
 var soloStates      = [false, false, false, false, false, false, false, false];
 var recordStates    = [false, false, false, false, false, false, false, false];
-var deviceStates    = [false, false, false, false, false, false, false, false];
+var deviceStates    = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 var stoppedStates   = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, true);
 var queuedStates    = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, false);
 
@@ -146,9 +146,14 @@ var macroObserver = function(channel, macro)
     var ch = channel;
     return function (macro_amount)
     {
-        if (macro == DEVICE_MACRO)
+        if (macro == SELECT_MACRO)
         {
             deviceStates[ch] = macro_amount != 0;
+            updatePad(ch);            
+        }
+        else if (macro == DEVICE_MACRO)
+        {
+            deviceStates[ch+8] = macro_amount != 0;
             updatePad(ch+8);
         }
     }
@@ -205,7 +210,7 @@ function init()
     transport = host.createTransport();
     transport.getCrossfade().addValueObserver(crossfadeObserver);
 
-    var slotBanks = [];
+    //var slotBanks = [];
 
     transport.getPosition().addTimeObserver(":", 2, 1, 1, 0  , function(value)
 	{
@@ -237,8 +242,8 @@ function init()
         childDeviceCursors[i] = childDeviceCursorsArray;
         childControlPageCursors[i] = childControlPageCursorsArray;
 
-        slotBanks[i] = trackBank.getChannel(i).getClipLauncherSlots();
-        slotBanks[i].addPlaybackStateObserver(playbackObserver(i));
+        //slotBanks[i] = trackBank.getChannel(i).getClipLauncherSlots();
+        //slotBanks[i].addPlaybackStateObserver(playbackObserver(i));
 
         trackBank.getChannel(i).getMute().addValueObserver(muteObserver(i));
         trackBank.getChannel(i).getSolo().addValueObserver(soloObserver(i));
@@ -248,6 +253,7 @@ function init()
 
         //sendBanks[i].getItemAt(DEVICE_SEND).addValueObserver(sendObserver(i, DEVICE_SEND));
         
+        controlPageCursors[i].getParameter(SELECT_MACRO).addValueObserver(macroObserver(i, SELECT_MACRO));
         controlPageCursors[i].getParameter(DEVICE_MACRO).addValueObserver(macroObserver(i, DEVICE_MACRO));
     }
     
@@ -287,8 +293,9 @@ function updatePad(pad)
 {
     if (pad < 8)
     {
-        var state = playbackStates[pad];
-        sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], PlaybackStateColour[state]);
+        //var state = playbackStates[pad];
+        //sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], PlaybackStateColour[state]);
+        sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], DeviceColour[deviceStates[pad] ? 1 : 0]);
     }
     else
     {
@@ -306,7 +313,7 @@ function updatePad(pad)
         }
         else if (buttonMode == ButtonMode.DEVICE)
         {
-            sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], DeviceColour[deviceStates[pad - 8] ? 1 : 0]);
+            sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], DeviceColour[deviceStates[pad] ? 1 : 0]);
         }
     }
 }
@@ -373,12 +380,10 @@ function onMidi(status, data1, data2)
         
         if (button < 8)
         {
-            trackBank.getChannel(ch).stop();
-            // hack for groups that don't send stop info to observer
-            if (playbackStates[ch] == PlaybackState.PLAYING)
-            {
-                playbackStates[ch] = PlaybackState.STOPDUE;
-            }
+            if (deviceStates[ch] == true)
+                controlPageCursors[ch].getParameter(SELECT_MACRO).set(0, 128);
+            else
+                controlPageCursors[ch].getParameter(SELECT_MACRO).set(127, 128);
         }
         else
         {
@@ -397,10 +402,8 @@ function onMidi(status, data1, data2)
             else if (buttonMode == ButtonMode.DEVICE && data2 == 127)
             {
                 if (deviceStates[ch] == true)
-                    //sendBanks[ch].set(0, 128);
                     controlPageCursors[ch].getParameter(DEVICE_MACRO).set(0, 128);
                 else
-                    //sendBanks[ch].set(127, 128);
                     controlPageCursors[ch].getParameter(DEVICE_MACRO).set(127, 128);
             }
         }
@@ -411,8 +414,6 @@ function onMidi(status, data1, data2)
     {
         var channelIdx = KnobMap[data1] % 8;
         var macro = KnobMap[data1] / 8;
-
-        //println(childTrackCount[channelIdx]);
 
         deviceCursors[channelIdx].scrollTo(0);
         controlPageCursors[channelIdx].getParameter(macro).set(data2, 128);
