@@ -9,18 +9,13 @@ host.defineSysexIdentityReply('F0 7E 00 06 02 00 20 29 61 00 00 00 00 00 03 06 F
 load("launch-control-xl.constants.js");
 load("launch-control-xl.utils.js");
 
-var buttonMode = ButtonMode.SOLO;
+var buttonMode = ButtonMode.DEVICE;
 var knobMode = KnobMode.PERFORM;
-
-var playbackStates = makeArray(NUM_TRACKS, PlaybackState.STOPPED);
-var playbackStatesClips = makeTable(NUM_TRACKS, NUM_SCENES, PlaybackState.STOPPED);
 
 var muteStates      = [false, false, false, false, false, false, false, false];
 var soloStates      = [false, false, false, false, false, false, false, false];
 var recordStates    = [false, false, false, false, false, false, false, false];
 var deviceStates    = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
-var stoppedStates   = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, true);
-var queuedStates    = makeTable(NUM_TRACKS, MAX_CHILD_TRACKS + 1, false);
 
 var deviceCursors           = [];
 var controlPageCursors      = [];
@@ -46,78 +41,6 @@ var childrenCountObserver = function(channel)
     }
 };
 
-var playbackObserver = function(channel)
-{
-    var ch = channel;
-    return function (slot, state, queued)
-    {
-        //println(ch + " " + slot + " " + state + " " + queued);
-        if (state == 0 && !queued)
-        {
-            playbackStatesClips[ch][slot] = PlaybackState.STOPPED;
-        }
-        else if (state == 0 && queued)
-        {
-            playbackStatesClips[ch][slot] = PlaybackState.STOPDUE;
-        }
-        else if (state == 1 && queued)
-        {
-            playbackStatesClips[ch][slot] = PlaybackState.QUEUED;
-        }
-        else if (state == 1 && !queued)
-        {
-            playbackStatesClips[ch][slot] = PlaybackState.PLAYING;
-        }
-        
-        playbackStates[ch] = PlaybackState.STOPPED;
-        for (var i = 0; i < NUM_SCENES; i++)
-        {
-            if (playbackStatesClips[ch][i] > playbackStates[ch])
-            {
-                playbackStates[ch] = playbackStatesClips[ch][i];
-            }
-        }
-        
-        updatePad(ch);
-    }
-};
-
-var stoppedObserver = function(track, child)
-{
-    var t = track;
-    var ch = child;
-    return function (stopped)
-    {
-        stoppedStates[t][ch] = stopped;
-        
-        playbackStates[t] = PlaybackState.STOPPED;
-        for (var i = 0; i < childTrackCount[t] + 1; i++)
-        {
-            if (stoppedStates[t][i] == false)
-            {
-                playbackStates[t] = PlaybackState.PLAYING;
-            }
-        }
-        
-        updatePad(t);
-    }
-};
-
-var queuedForStopObserver = function(track, child)
-{
-    var t = track;
-    var ch = child;
-    return function (queued)
-    {
-        queuedStates[t][ch] = queued;
-        if (queued)
-        {
-            playbackStates[t] = PlaybackState.STOPDUE;
-            updatePad(t);
-        }
-    }
-};
-
 var muteObserver = function(channel)
 {
     var ch = channel;
@@ -125,19 +48,6 @@ var muteObserver = function(channel)
     {
         muteStates[ch] = mute;
         updatePad(ch+8);
-    }
-};
-
-var sendObserver = function(channel, send)
-{
-    var ch = channel;
-    return function (send_amount)
-    {
-        if (send == DEVICE_SEND)
-        {
-            deviceStates[ch] = send_amount != 0;
-            updatePad(ch+8);
-        }
     }
 };
 
@@ -225,7 +135,7 @@ function init()
     {
         // create main device cursor for the track
         deviceCursors[i] = trackBank.getChannel(i).createDeviceBank(1);
-        controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(3);
+        controlPageCursors[i] = deviceCursors[i].getDevice(0).createCursorRemoteControlsPage(8);
 
         childTracks[i] = trackBank.getChannel(i).createTrackBank(MAX_CHILD_TRACKS, 0, 0, false);
         childTracks[i].channelCount().addValueObserver(childrenCountObserver(i));
@@ -242,16 +152,11 @@ function init()
         childDeviceCursors[i] = childDeviceCursorsArray;
         childControlPageCursors[i] = childControlPageCursorsArray;
 
-        //slotBanks[i] = trackBank.getChannel(i).getClipLauncherSlots();
-        //slotBanks[i].addPlaybackStateObserver(playbackObserver(i));
-
         trackBank.getChannel(i).getMute().addValueObserver(muteObserver(i));
         trackBank.getChannel(i).getSolo().addValueObserver(soloObserver(i));
         trackBank.getChannel(i).getArm().addValueObserver(recordObserver(i));
         
         sendBanks[i] = trackBank.getChannel(i).sendBank();
-
-        //sendBanks[i].getItemAt(DEVICE_SEND).addValueObserver(sendObserver(i, DEVICE_SEND));
         
         controlPageCursors[i].getParameter(SELECT_MACRO).addValueObserver(macroObserver(i, SELECT_MACRO));
         controlPageCursors[i].getParameter(DEVICE_MACRO).addValueObserver(macroObserver(i, DEVICE_MACRO));
@@ -401,7 +306,7 @@ function onMidi(status, data1, data2)
             }
             else if (buttonMode == ButtonMode.DEVICE && data2 == 127)
             {
-                if (deviceStates[ch] == true)
+                if (deviceStates[ch+8] == true)
                     controlPageCursors[ch].getParameter(DEVICE_MACRO).set(0, 128);
                 else
                     controlPageCursors[ch].getParameter(DEVICE_MACRO).set(127, 128);
@@ -409,8 +314,8 @@ function onMidi(status, data1, data2)
         }
         updatePad(button);
     }
-    // First two knobs control first two macros of each channel
-    else if (status == UserPageCCs.Page1 && KnobMap[data1] >= 0 && KnobMap[data1] < 16)
+    // knobs control first three macros of each channel
+    else if (status == UserPageCCs.Page1 && KnobMap[data1] >= 0 && KnobMap[data1] < 24)
     {
         var channelIdx = KnobMap[data1] % 8;
         var macro = KnobMap[data1] / 8;
@@ -422,17 +327,6 @@ function onMidi(status, data1, data2)
             childDeviceCursors[channelIdx][i].scrollTo(0);
             childControlPageCursors[channelIdx][i].getParameter(macro).set(data2, 128);
         }
-    }
-    // the third knob controls the first send
-    else if (status == UserPageCCs.Page1 && KnobMap[data1] >= 16 && KnobMap[data1] < 24)
-    {
-        var channelIdx = KnobMap[data1] % 8;
-        var send = 0;
-
-		// workaround for the send knob lagging when moving to/from -inf
-		if (data2 == 0) data2 = 1;
-
-        sendBanks[channelIdx].getItemAt(send).set(data2, 128);
     }
     // Faders
     else if (status == UserPageCCs.Page1 && FaderMap[data1] >= 0 && FaderMap[data1] < 8)
