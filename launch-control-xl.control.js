@@ -120,8 +120,6 @@ function init()
     transport = host.createTransport();
     transport.getCrossfade().addValueObserver(crossfadeObserver);
 
-    //var slotBanks = [];
-
     transport.getPosition().addTimeObserver(":", 2, 1, 1, 0  , function(value)
 	{
         if (value != currentTime)
@@ -198,7 +196,6 @@ function updatePad(pad)
 {
     if (pad < 8)
     {
-        //var state = playbackStates[pad];
         //sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], PlaybackStateColour[state]);
         sendMidi(UserPageNotes.Page1, ButtonReverseMap[pad], DeviceColour[deviceStates[pad] ? 1 : 0]);
     }
@@ -271,13 +268,24 @@ function processSideButtons(status, data1, data2)
     }
 }
 
+function setMacros(ch, macro, value)
+{
+    deviceCursors[ch].scrollTo(0);
+    controlPageCursors[ch].getParameter(macro).set(value, 128);
+    for (var i = 0; i < childTrackCount[ch]; i++)
+    {
+        childDeviceCursors[ch][i].scrollTo(0);
+        childControlPageCursors[ch][i].getParameter(macro).set(value, 128);
+    }
+}
+
 function onMidi(status, data1, data2)
 {
     //printMidi(status, data1, data2);
 
     processSideButtons(status, data1, data2);
 
-    // Buttons
+    // button function depend on row and mode
     if (status == UserPageNotes.Page1 && ButtonMap[data1] >= 0 && ButtonMap[data1] <= 15)
     {
         var button = ButtonMap[data1];
@@ -285,10 +293,9 @@ function onMidi(status, data1, data2)
         
         if (button < 8)
         {
-            if (deviceStates[ch] == true)
-                controlPageCursors[ch].getParameter(SELECT_MACRO).set(0, 128);
-            else
-                controlPageCursors[ch].getParameter(SELECT_MACRO).set(127, 128);
+            var value = 0;
+            if (deviceStates[ch] == false) value = 127;
+            setMacros(ch, SELECT_MACRO, value);
         }
         else
         {
@@ -306,10 +313,9 @@ function onMidi(status, data1, data2)
             }
             else if (buttonMode == ButtonMode.DEVICE && data2 == 127)
             {
-                if (deviceStates[ch+8] == true)
-                    controlPageCursors[ch].getParameter(DEVICE_MACRO).set(0, 128);
-                else
-                    controlPageCursors[ch].getParameter(DEVICE_MACRO).set(127, 128);
+                var value = 0;
+                if (deviceStates[ch + 8] == false) value = 127;
+                setMacros(ch, DEVICE_MACRO, value);
             }
         }
         updatePad(button);
@@ -319,21 +325,16 @@ function onMidi(status, data1, data2)
     {
         var channelIdx = KnobMap[data1] % 8;
         var macro = KnobMap[data1] / 8;
-
-        deviceCursors[channelIdx].scrollTo(0);
-        controlPageCursors[channelIdx].getParameter(macro).set(data2, 128);
-        for (var i = 0; i < childTrackCount[channelIdx]; i++)
-        {
-            childDeviceCursors[channelIdx][i].scrollTo(0);
-            childControlPageCursors[channelIdx][i].getParameter(macro).set(data2, 128);
-        }
+        setMacros(channelIdx, macro, data2);
     }
-    // Faders
+    // faders
     else if (status == UserPageCCs.Page1 && FaderMap[data1] >= 0 && FaderMap[data1] < 8)
     {
         var channelIdx = FaderMap[data1];
         
         // to map the faders to 0db maximum, set the max value in the XL Editor to 102
+        
+        // for groups only the child tracks are adjusted
         if (childTrackCount[channelIdx] == 0)
         {
             trackBank.getChannel(channelIdx).getVolume().set(data2, 128);

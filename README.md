@@ -4,7 +4,7 @@ Novation Launch Control XL Bitwig Script
 - The eight columns on the controller correspond to the first eight tracks in
   the project. If the track is a group, then both the group and all it's
   children are controlled by this one column.
-- The first knobs control the first three remote controls of the first device on each track.
+- The knobs control the first three remote controls of the primary device on each track.
 - The first row of buttons control the fourth remote control. Press the button to
   set the control to 100%, press again to set to 0%. Good for controlling button
   modulators.
